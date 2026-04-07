@@ -21,7 +21,7 @@ export function clearRoutePatchData(): void {
   patchedMode = null;
 }
 
-export function detectGamePage(doc: Document, _mode: UIMode): GamePageInfo | null {
+export function detectGamePage(_doc: Document, _mode: UIMode): GamePageInfo | null {
   // Big Picture: patched route data
   if (patchedAppId !== null && patchedMode !== null) {
     return { appId: patchedAppId, mode: patchedMode };

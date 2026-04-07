@@ -11,6 +11,17 @@ let processingAppId: number | null = null;
 let panelDoc: Document | null = null;   // iframe/doc where badge actually lives
 let _lastLoggedAppId: number | null | undefined = undefined;
 
+function clearCurrentBadge(): void {
+  panelDoc?.getElementById(BADGE_ID)?.remove();
+  panelDoc = null;
+}
+
+function resetStateForNoGame(): void {
+  clearCurrentBadge();
+  currentAppId = null;
+  processingAppId = null;
+}
+
 export function disconnectObserver(): void {
   observer?.disconnect();
   observer = null;
@@ -59,10 +70,7 @@ async function _handleGamePage(doc: Document, mode: UIMode): Promise<void> {
 
   if (!info) {
     if (currentAppId !== null) {
-      panelDoc?.getElementById(BADGE_ID)?.remove();
-      panelDoc = null;
-      currentAppId = null;
-      processingAppId = null;
+      resetStateForNoGame();
     }
     return;
   }
@@ -70,8 +78,7 @@ async function _handleGamePage(doc: Document, mode: UIMode): Promise<void> {
   const { appId } = info;
 
   if (currentAppId !== appId) {
-    panelDoc?.getElementById(BADGE_ID)?.remove();
-    panelDoc = null;
+    clearCurrentBadge();
     currentAppId = appId;
     processingAppId = null;
   }
@@ -81,14 +88,16 @@ async function _handleGamePage(doc: Document, mode: UIMode): Promise<void> {
     // Clean up stale placeholders from older builds.
     if (existingBadge.textContent?.includes('Pending')) {
       existingBadge.remove();
-    } else {
-    // Keep badge as the last tile — Steam may render achievements after us
+      return;
+    }
+
+    // Keep badge as the last tile — Steam may render achievements after us.
     if (existingBadge.parentElement && existingBadge !== existingBadge.parentElement.lastElementChild) {
       existingBadge.parentElement.appendChild(existingBadge);
     }
     return;
-    }
   }
+
   if (processingAppId === appId) return;
 
   processingAppId = appId;
@@ -113,9 +122,8 @@ async function _handleGamePage(doc: Document, mode: UIMode): Promise<void> {
   while (Date.now() < deadline) {
     // Check if an achievements tile has appeared in the row
     const rowNow = target.doc.getElementById(target.row.id as string) ?? target.row;
-    const tiles = rowNow.children;
-    const hasAchievements = Array.from(tiles).some(
-      el => el !== rowNow && el.textContent?.includes('Achievements')
+    const hasAchievements = Array.from(rowNow.children).some(
+      el => el.textContent?.includes('Achievements')
     );
     if (hasAchievements) break;
     await new Promise(r => setTimeout(r, 50));
