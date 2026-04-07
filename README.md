@@ -41,3 +41,6 @@ Windows path:
 Notes:
 
 - If you extract and end up with a nested folder like `protondb-status/protondb-status`, move the inner folder up one level.
+
+> [!NOTE]
+> **AI Disclaimer**: Parts of this project were assisted or written by AI. If that's something you're not comfortable with, no hard feelings, I understand and I don't force anyone to use it. The code may have flaws. If you spot something that could be better, contributions are very welcome. I'm still learning and would appreciate the help.
