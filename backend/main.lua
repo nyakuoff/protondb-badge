@@ -7,9 +7,14 @@ local logger = require("logger")
 local millennium = require("millennium")
 
 -- Global callable: invoked from frontend via callable('FetchProtonDb')
+-- After (hardened)
 function FetchProtonDb(appId)
-    if not appId then
-        return json.encode({ error = "missing appId" })
+    if type(appId) ~= "number" then
+        return json.encode({ error = "invalid appId type" })
+    end
+
+    if appId < 1 or appId ~= math.floor(appId) then
+        return json.encode({ error = "invalid appId value" })
     end
 
     local url = "https://www.protondb.com/api/v1/reports/summaries/" .. tostring(appId) .. ".json"
