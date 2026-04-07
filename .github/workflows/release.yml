@@ -1,0 +1,74 @@
+name: Build and Release Plugin
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build plugin
+        run: npm run build
+
+      - name: Prepare release folder
+        run: |
+          rm -rf release
+          mkdir -p release/protondb-status
+          rsync -a \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'node_modules' \
+            --exclude 'release' \
+            --exclude '.vscode' \
+            --exclude '.idea' \
+            ./ release/protondb-status/
+
+      - name: Create zip archive
+        run: |
+          TAG_NAME="${GITHUB_REF_NAME:-dev}"
+          cd release
+          zip -r "protondb-status-${TAG_NAME}.zip" protondb-status
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: protondb-status-zip
+          path: release/protondb-status-*.zip
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: protondb-status-zip
+          path: release
+
+      - name: Publish GitHub release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/protondb-status-*.zip
+          generate_release_notes: true
