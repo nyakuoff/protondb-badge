@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/SteamClientHomebrew/Millennium/main/src/sys/plugin-schema.json",
+  "name": "protondb-status",
+  "common_name": "ProtonDB Status",
+  "description": "Show ProtonDB compatibility ratings near the Play Time display",
+  "author": "",
+  "version": "1.0.0",
+  "useBackend": true,
+  "backendType": "lua"
+}
