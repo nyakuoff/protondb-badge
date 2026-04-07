@@ -40,27 +40,4 @@ Windows path:
 
 Notes:
 
-- The zip is prebuilt and includes `.millennium`, so users do not need Node.js/npm.
 - If you extract and end up with a nested folder like `protondb-status/protondb-status`, move the inner folder up one level.
-
-## Releases
-
-This repo includes a GitHub Actions workflow that:
-
-- installs dependencies
-- builds the plugin
-- packages a local-install zip with the correct folder layout
-- uploads the zip to GitHub Releases when you push a tag like `v1.0.1`
-
-Tag and push example:
-
-```bash
-git tag v1.0.1
-git push origin v1.0.1
-```
-
-## Notes
-
-- Frontend changes usually apply after rebuild/reload.
-- Backend Lua changes may require a full Steam restart.
-- Make sure your screenshot exists at `images/screenshot.png` for README rendering on steambrew.app.
