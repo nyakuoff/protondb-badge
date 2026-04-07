@@ -9,7 +9,6 @@ Show ProtonDB compatibility directly in the game details stats row (next to Play
 - Shows ProtonDB tier (Platinum/Gold/Silver/Bronze/Borked)
 - Badge appears only when a valid ProtonDB rating exists
 - Click badge to open the game ProtonDB page
-- Lua backend proxy avoids frontend CORS issues
 
 ## Requirements
 
@@ -18,36 +17,9 @@ Show ProtonDB compatibility directly in the game details stats row (next to Play
 
 ## Install (Marketplace)
 
-If this plugin is available on the SteamBrew plugin marketplace, install it from:
+Working on getting it added
 
-- https://steambrew.app/plugins
-
-## Install (Local from this repository)
-
-1. Clone this repository.
-2. Build the frontend:
-
-```bash
-npm install
-npm run build
-```
-
-3. Symlink the repository into your Millennium plugins folder:
-
-```bash
-mkdir -p ~/.local/share/millennium/plugins
-ln -sfn "$(pwd)" ~/.local/share/millennium/plugins/protondb-status
-```
-
-Windows path:
-
-```text
-%MILLENNIUM_PATH%\plugins\protondb-status
-```
-
-4. Restart Steam, then enable the plugin from Millennium plugins settings.
-
-## Install (Local from zip release)
+## Install (Releases)
 
 1. Download the latest release.
 2. Extract it into your Millennium plugins directory so this path exists:
