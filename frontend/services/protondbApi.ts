@@ -9,17 +9,29 @@ export interface ProtonDbRating {
   score: number;
   total: number;
   trendingTier: string;
+  appId: number;
 }
 
 const cache = new Map<number, ProtonDbRating | null>();
 
-export async function fetchProtonDbRating(appId: number): Promise<ProtonDbRating | null> {
+const NON_STEAM_APPID_THRESHOLD = 0x80000000;
+
+export function isNonSteamGame(appId: number): boolean {
+  return appId >= NON_STEAM_APPID_THRESHOLD;
+}
+
+export async function fetchProtonDbRating(
+  appId: number,
+  title: string
+): Promise<ProtonDbRating | null> {
   if (cache.has(appId)) {
     return cache.get(appId) ?? null;
   }
 
   try {
-    const json = await fetchFn({ appId });
+    const json = isNonSteamGame(appId)
+      ? await fetchFn({ appId: 0, title } as any) // signal backend to resolve by title
+      : await fetchFn({ appId });
     const data = JSON.parse(json);
 
     if (data.error || !data.tier) {
@@ -34,6 +46,7 @@ export async function fetchProtonDbRating(appId: number): Promise<ProtonDbRating
       score: data.score ?? 0,
       total: data.total ?? 0,
       trendingTier: data.trendingTier ?? data.tier,
+      appId: data.resolvedAppId
     };
 
     cache.set(appId, rating);

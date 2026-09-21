@@ -1,141 +1,264 @@
-import { UIMode, detectGamePage } from './detector';
-import { fetchProtonDbRating } from '../services/protondbApi';
+import {
+  UIMode,
+  detectGamePage,
+  setRoutePatchData,
+  clearRoutePatchData
+} from './detector';
+import { fetchProtonDbRating, isNonSteamGame } from '../services/protondbApi';
 import { findToolbarRow, createBadge } from '../display/badge';
 
 const BADGE_ID = 'protondb-status-badge';
 
-let observer: MutationObserver | null = null;
-let intervalId: ReturnType<typeof setInterval> | null = null;
-let currentAppId: number | null = null;
-let processingAppId: number | null = null;
-let panelDoc: Document | null = null;   // iframe/doc where badge actually lives
-let _lastLoggedAppId: number | null | undefined = undefined;
-
-function clearCurrentBadge(): void {
-  panelDoc?.getElementById(BADGE_ID)?.remove();
-  panelDoc = null;
+interface WindowState {
+  doc: Document;
+  mode: UIMode;
+  observer: MutationObserver;
+  intervalId: ReturnType<typeof setInterval>;
+  debounceHandle: ReturnType<typeof setTimeout> | null;
+  routePatchCleanup: (() => void) | null;
+  currentAppId: number | null;
+  processingAppId: number | null;
+  panelDoc: Document | null;
+  lastLoggedAppId: number | null | undefined;
 }
 
-function resetStateForNoGame(): void {
-  clearCurrentBadge();
-  currentAppId = null;
-  processingAppId = null;
+// Keyed by Steam's window name (e.g. "SP Desktop_uid0") rather than Document
+// identity — Steam can hand out a new Document for the same logical window
+// (e.g. desktop, when returning from Big Picture), and keying by name lets
+// us detect and cleanly replace a stale observer instead of accumulating
+// duplicates that fight over the same DOM.
+const windowStates = new Map<string, WindowState>();
+
+function setupRoutePatch(state: WindowState): void {
+  const routerHook = (window as any).__ROUTER_HOOK_INSTANCE;
+  if (!routerHook) {
+    console.log('[ProtonDB] Router hook not available for this window');
+    return;
+  }
+
+  const patchFn = (props: any) => {
+    const renderFunc = props.children?.props?.renderFunc;
+    if (renderFunc) {
+      const orig = renderFunc;
+      props.children.props.renderFunc = (...args: any[]) => {
+        const ret = orig(...args);
+        const overview = ret?.props?.children?.props?.overview;
+        if (overview?.appid) {
+          setRoutePatchData(
+            overview.appid,
+            UIMode.BigPicture,
+            overview.display_name
+          );
+        }
+        return ret;
+      };
+    }
+    return props;
+  };
+
+  const EUIMODE_GAMEPAD = 4;
+  routerHook.addPatch('/library/app/:appid', patchFn, EUIMODE_GAMEPAD);
+  state.routePatchCleanup = () =>
+    routerHook.removePatch('/library/app/:appid', patchFn, EUIMODE_GAMEPAD);
 }
 
-export function disconnectObserver(): void {
-  observer?.disconnect();
-  observer = null;
-  if (intervalId !== null) { clearInterval(intervalId); intervalId = null; }
-  currentAppId = null;
-  processingAppId = null;
-  panelDoc = null;
-}
-
-export function setupObserver(doc: Document, mode: UIMode): void {
-  disconnectObserver();
-  _lastLoggedAppId = undefined;
-
-  console.log('[ProtonDB] setupObserver: doc is global document?', doc === document,
-    '| MainWindowBrowserManager?', !!(window as any).MainWindowBrowserManager);
-
-  // MutationObserver catches DOM inserts at startup and after navigations
-  observer = new MutationObserver(() => handleGamePage(doc, mode));
-  observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
-
-  // setInterval as fallback — catches pathname changes via CSS show/hide
-  intervalId = setInterval(() => handleGamePage(doc, mode), 500);
-
-  handleGamePage(doc, mode);
-}
-
-async function handleGamePage(doc: Document, mode: UIMode): Promise<void> {
+async function handleGamePage(state: WindowState): Promise<void> {
   try {
-    await _handleGamePage(doc, mode);
+    await _handleGamePage(state);
   } catch (e) {
     console.error('[ProtonDB] handleGamePage threw:', e);
   }
 }
 
-async function _handleGamePage(doc: Document, mode: UIMode): Promise<void> {
+function scheduleHandleGamePage(state: WindowState): void {
+  if (state.debounceHandle) clearTimeout(state.debounceHandle);
+  state.debounceHandle = setTimeout(() => {
+    state.debounceHandle = null;
+    handleGamePage(state);
+  }, 100);
+}
+
+async function _handleGamePage(state: WindowState): Promise<void> {
+  const { doc, mode } = state;
   const info = detectGamePage(doc, mode);
   const detectedAppId = info?.appId ?? null;
 
-  if (detectedAppId !== _lastLoggedAppId) {
-    _lastLoggedAppId = detectedAppId;
-    const w = window as any;
-    console.log('[ProtonDB] detection changed → appId:', detectedAppId,
-      '| pathname:', w.MainWindowBrowserManager?.m_lastLocation?.pathname,
-      '| playtimeIcons:', doc.querySelectorAll('[class*="SVGIcon_PlayTime"]').length);
+  if (detectedAppId !== state.lastLoggedAppId) {
+    state.lastLoggedAppId = detectedAppId;
+    console.log(
+      '[ProtonDB]',
+      mode,
+      'detection changed → appId:',
+      detectedAppId
+    );
   }
 
   if (!info) {
-    if (currentAppId !== null) {
-      resetStateForNoGame();
+    if (state.currentAppId !== null) {
+      state.panelDoc?.getElementById(BADGE_ID)?.remove();
+      state.panelDoc = null;
+      state.currentAppId = null;
+      state.processingAppId = null;
+    }
+    if (mode === UIMode.BigPicture) {
+      clearRoutePatchData();
     }
     return;
   }
 
-  const { appId } = info;
+  const { appId, title } = info;
 
-  if (currentAppId !== appId) {
-    clearCurrentBadge();
-    currentAppId = appId;
-    processingAppId = null;
+  if (state.currentAppId !== appId) {
+    state.panelDoc?.getElementById(BADGE_ID)?.remove();
+    state.currentAppId = appId;
+    state.processingAppId = null;
   }
 
-  const existingBadge = panelDoc?.getElementById(BADGE_ID);
+  const existingBadge = state.panelDoc?.getElementById(BADGE_ID);
   if (existingBadge) {
-    // Clean up stale placeholders from older builds.
     if (existingBadge.textContent?.includes('Pending')) {
       existingBadge.remove();
       return;
     }
-
-    // Keep badge as the last tile — Steam may render achievements after us.
-    if (existingBadge.parentElement && existingBadge !== existingBadge.parentElement.lastElementChild) {
+    if (
+      existingBadge.parentElement &&
+      existingBadge !== existingBadge.parentElement.lastElementChild
+    ) {
       existingBadge.parentElement.appendChild(existingBadge);
     }
     return;
   }
 
-  if (processingAppId === appId) return;
+  if (state.processingAppId === appId) return;
+  state.processingAppId = appId;
 
-  processingAppId = appId;
-
-  const target = findToolbarRow();
+  const target = findToolbarRow(state.doc);
   if (!target) {
-    console.log('[ProtonDB] toolbar row not found — retrying on next mutation');
-    processingAppId = null;
+    state.processingAppId = null;
     return;
   }
-  panelDoc = target.doc;
+  state.panelDoc = target.doc;
 
-  // Fetch rating before touching the DOM — no loading placeholder
-  const rating = await fetchProtonDbRating(appId);
+  const rating = await fetchProtonDbRating(
+    appId,
+    isNonSteamGame(appId) ? title : undefined
+  );
 
-  if (currentAppId !== appId) { processingAppId = null; return; }
-  if (!rating) { processingAppId = null; return; } // no rating = no badge
+  if (state.currentAppId !== appId) {
+    state.processingAppId = null;
+    return;
+  }
+  if (!rating) {
+    state.processingAppId = null;
+    return;
+  }
 
-  // Wait briefly for achievements tile to load so we can append after it
   const ACHIEVEMENTS_WAIT_MS = 400;
   const deadline = Date.now() + ACHIEVEMENTS_WAIT_MS;
   while (Date.now() < deadline) {
-    // Check if an achievements tile has appeared in the row
-    const rowNow = target.doc.getElementById(target.row.id as string) ?? target.row;
-    const hasAchievements = Array.from(rowNow.children).some(
-      el => el.textContent?.includes('Achievements')
+    const rowNow =
+      target.doc.getElementById(target.row.id as string) ?? target.row;
+    const hasAchievements = Array.from(rowNow.children).some(el =>
+      el.textContent?.includes('Achievements')
     );
     if (hasAchievements) break;
     await new Promise(r => setTimeout(r, 50));
   }
 
-  if (currentAppId !== appId) { processingAppId = null; return; }
+  if (state.currentAppId !== appId) {
+    state.processingAppId = null;
+    return;
+  }
 
-  // Re-find row in case DOM was rebuilt while we waited
-  const freshTarget = findToolbarRow() ?? target;
-  panelDoc = freshTarget.doc;
+  const freshTarget = findToolbarRow(state.doc) ?? target;
+  if (freshTarget.doc.getElementById(BADGE_ID)) {
+    state.processingAppId = null;
+    return;
+  }
+  state.panelDoc = freshTarget.doc;
+  freshTarget.row.appendChild(createBadge(rating, freshTarget.doc));
+  state.processingAppId = null;
+}
 
-  console.log('[ProtonDB] rating fetched:', rating.tier);
-  freshTarget.row.appendChild(createBadge(rating, appId, freshTarget.doc));
-  processingAppId = null;
+function teardownState(state: WindowState): void {
+  state.observer?.disconnect();
+  if (state.intervalId) clearInterval(state.intervalId);
+  if (state.debounceHandle) clearTimeout(state.debounceHandle);
+  state.routePatchCleanup?.();
+  state.panelDoc?.getElementById(BADGE_ID)?.remove();
+}
+
+// Sets up (or re-attaches) an observer for the given named window.
+// - Same name + same doc: already watching this exact window, no-op.
+// - Same name + different doc: Steam handed us a new Document for a window
+//   we already know about (e.g. desktop after returning from Big Picture) —
+//   tear down the stale observer and attach a fresh one to the new doc.
+// - New name: brand new window, set up from scratch.
+export function setupObserver(name: string, doc: Document, mode: UIMode): void {
+  const existing = windowStates.get(name);
+
+  if (existing && existing.doc === doc) {
+    console.log('[ProtonDB] Observer already running for', name, '— skipping');
+    return;
+  }
+
+  if (existing) {
+    console.log(
+      '[ProtonDB] Document changed for',
+      name,
+      '— tearing down stale observer and reattaching'
+    );
+    teardownState(existing);
+  }
+
+  const state: WindowState = {
+    doc,
+    mode,
+    observer: null as any,
+    intervalId: null as any,
+    debounceHandle: null,
+    routePatchCleanup: null,
+    currentAppId: null,
+    processingAppId: null,
+    panelDoc: null,
+    lastLoggedAppId: undefined
+  };
+
+  if (mode === UIMode.BigPicture) {
+    setupRoutePatch(state);
+  }
+
+  state.observer = new MutationObserver(() => scheduleHandleGamePage(state));
+  state.observer.observe(doc.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['class']
+  });
+  state.intervalId = setInterval(() => scheduleHandleGamePage(state), 500);
+
+  windowStates.set(name, state);
+  handleGamePage(state);
+  console.log(
+    '[ProtonDB] Observer set up for',
+    name,
+    '(' + mode + ')',
+    '| total tracked windows:',
+    windowStates.size,
+    '| names:',
+    [...windowStates.keys()]
+  );
+}
+
+export function disconnectObserverForName(name: string): void {
+  const state = windowStates.get(name);
+  if (!state) return;
+  teardownState(state);
+  windowStates.delete(name);
+}
+
+export function disconnectAllObservers(): void {
+  for (const name of windowStates.keys()) {
+    disconnectObserverForName(name);
+  }
 }
