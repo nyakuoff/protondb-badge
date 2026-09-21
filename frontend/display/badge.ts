@@ -1,7 +1,8 @@
 import { findClassModule } from '@steambrew/client';
 import type { ProtonDbRating } from '../services/protondbApi';
 
-// Live CSS module resolved at runtime; KNOWN is a hardcoded fallback from April 2026 DOM snapshot
+// Live CSS modules resolved at runtime — no hardcoded classnames, so this
+// tracks Steam's actual class hashes even after they change between updates.
 const PlayBar =
   (findClassModule?.((m: any) => !!(m.GameStat && m.PlayBarLabel)) as
     | Record<string, string>
@@ -16,21 +17,11 @@ const PlaytimeModule =
     | Record<string, string>
     | undefined) ?? null;
 
-const KNOWN: Record<string, string> = {
-  GameStat: '_1kiZKVbDe-9Ikootk57kpA',
-  GameStatWithIcon: '_1aKegVl9_lSdNAyWYZQlr9',
-  GameStatIcon: '_1tIg-QIrwMNtCm7NcYADyi',
-  GameStatIconVariant: '_1GZdosVXnfrf69yU8DWASl',
-  GameStatRight: '_3m_zjRTQBqcfzCjXLXUHcR',
-  PlayBarLabel: '_34lrt5-Fc3usZU6trA1P0-',
-  PlayBarDetailLabel: '_2TYVGoD27ZMfjRirKQNLfk'
-};
-
 function c(key: string): string {
   if (key === 'GameStatWithIcon') {
-    return PlaytimeModule?.Playtime ?? PlayBar?.Playtime ?? KNOWN[key] ?? '';
+    return PlaytimeModule?.Playtime ?? PlayBar?.Playtime ?? '';
   }
-  return PlayBar?.[key] ?? KNOWN[key] ?? '';
+  return PlayBar?.[key] ?? '';
 }
 
 const TIER_COLORS: Record<string, string> = {
