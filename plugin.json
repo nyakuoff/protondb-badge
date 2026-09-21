@@ -4,7 +4,7 @@
   "common_name": "ProtonDB Status",
   "description": "Show ProtonDB compatibility ratings on game library pages.",
   "author": "Nyaku",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "useBackend": true,
   "backendType": "lua"
 }
