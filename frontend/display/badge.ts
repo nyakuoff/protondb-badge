@@ -7,6 +7,15 @@ const PlayBar =
     | Record<string, string>
     | undefined) ?? null;
 
+// GameStatWithIcon is our own label — Steam's real property name for that
+// classname is "Playtime" (per PluginDatabase#158 review). Multiple unrelated
+// modules can define a generic "Playtime" key, so require GameStat too to
+// land on the stats-row module instead of some unrelated module.
+const PlaytimeModule =
+  (findClassModule?.((m: any) => !!(m.Playtime && m.GameStat)) as
+    | Record<string, string>
+    | undefined) ?? null;
+
 const KNOWN: Record<string, string> = {
   GameStat: '_1kiZKVbDe-9Ikootk57kpA',
   GameStatWithIcon: '_1aKegVl9_lSdNAyWYZQlr9',
@@ -18,9 +27,9 @@ const KNOWN: Record<string, string> = {
 };
 
 function c(key: string): string {
-  // GameStatWithIcon is our own label — Steam's actual module property for
-  // that classname is "Playtime", so the dynamic lookup must use that name.
-  if (key === 'GameStatWithIcon') return PlayBar?.Playtime ?? KNOWN[key] ?? '';
+  if (key === 'GameStatWithIcon') {
+    return PlaytimeModule?.Playtime ?? PlayBar?.Playtime ?? KNOWN[key] ?? '';
+  }
   return PlayBar?.[key] ?? KNOWN[key] ?? '';
 }
 
