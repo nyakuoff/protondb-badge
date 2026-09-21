@@ -64,7 +64,14 @@ local function resolve_appid_from_title(title)
         return nil, "no results"
     end
 
-    return data.items[1].id, nil
+    local wanted = title:lower()
+    for _, item in ipairs(data.items) do
+        if type(item.name) == "string" and item.name:lower() == wanted then
+            return item.id, nil
+        end
+    end
+
+    return nil, "no exact match"
 end
 
 -- Callable: invoked from frontend via callable('FetchProtonDb')
