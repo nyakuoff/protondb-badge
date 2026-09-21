@@ -17,6 +17,9 @@ const KNOWN: Record<string, string> = {
 };
 
 function c(key: string): string {
+  // GameStatWithIcon is our own label — Steam's actual module property for
+  // that classname is "Playtime", so the dynamic lookup must use that name.
+  if (key === 'GameStatWithIcon') return PlayBar?.Playtime ?? KNOWN[key] ?? '';
   return PlayBar?.[key] ?? KNOWN[key] ?? '';
 }
 
