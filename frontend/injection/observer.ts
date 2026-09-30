@@ -116,10 +116,6 @@ async function _handleGamePage(state: WindowState): Promise<void> {
 
   const existingBadge = state.panelDoc?.getElementById(BADGE_ID);
   if (existingBadge) {
-    if (existingBadge.textContent?.includes('Pending')) {
-      existingBadge.remove();
-      return;
-    }
     if (
       existingBadge.parentElement &&
       existingBadge !== existingBadge.parentElement.lastElementChild

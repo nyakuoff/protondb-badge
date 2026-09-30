@@ -8,6 +8,11 @@ local millennium = require("millennium")
 
 local PROTONDB_URL = "https://www.protondb.com/api/v1/reports/summaries/"
 local STORE_SEARCH_URL = "https://store.steampowered.com/api/storesearch/"
+local STORE_APPDETAILS_URL = "https://store.steampowered.com/api/appdetails"
+
+-- appId -> true/false; only definitive answers are cached so transient
+-- store errors get retried on the next lookup
+local native_cache = {}
 
 -- Minimal RFC 3986 percent-encoding for query params
 local function url_encode(str)
@@ -16,7 +21,38 @@ local function url_encode(str)
     end))
 end
 
+-- Asks the Steam store whether the game ships a native Linux build.
+local function is_native_linux(appId)
+    if native_cache[appId] ~= nil then
+        return native_cache[appId]
+    end
+
+    local url = STORE_APPDETAILS_URL .. "?appids=" .. tostring(appId) .. "&filters=platforms"
+    local res, err = http.get(url, { timeout = 5 })
+    if not res or res.status < 200 or res.status >= 300 then
+        logger:error("appdetails request failed for appId " .. tostring(appId) .. ": " .. tostring(err or res.status))
+        return false
+    end
+
+    local ok, data = pcall(json.decode, res.body)
+    local entry = ok and type(data) == "table" and data[tostring(appId)] or nil
+    if type(entry) ~= "table" then
+        return false
+    end
+
+    local native = entry.success == true
+        and type(entry.data) == "table"
+        and type(entry.data.platforms) == "table"
+        and entry.data.platforms.linux == true
+    native_cache[appId] = native
+    return native
+end
+
 local function fetch_protondb_summary(appId)
+    if is_native_linux(appId) then
+        return json.encode({ tier = "native", resolvedAppId = appId })
+    end
+
     local url = PROTONDB_URL .. tostring(appId) .. ".json"
     local res, err = http.get(url)
 

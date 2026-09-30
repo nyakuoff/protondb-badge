@@ -6,7 +6,7 @@ Show ProtonDB compatibility directly in the game details stats row (next to Play
 
 ## Features
 
-- Shows ProtonDB tier (Platinum/Gold/Silver/Bronze/Borked)
+- Shows ProtonDB tier (Platinum/Gold/Silver/Bronze/Borked/Pending), or Native for games with a native Linux build
 - Badge appears only when a valid ProtonDB rating exists
 - Click badge to open the game ProtonDB page
 
